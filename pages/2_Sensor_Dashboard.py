@@ -1,0 +1,53 @@
+import pandas as pd
+import streamlit as st
+
+from utils.esp_client import get_sensor_data
+
+st.set_page_config(page_title="Sensor Dashboard", page_icon="🌡️", layout="wide")
+st.title("🌡️ Sensor Dashboard")
+
+if "sensor_history" not in st.session_state:
+    st.session_state["sensor_history"] = []
+
+col_a, col_b = st.columns([1, 3])
+with col_a:
+    refresh = st.button("🔄 Refresh reading", use_container_width=True)
+with col_b:
+    auto = st.checkbox("Auto-refresh every 10s")
+
+if refresh or not st.session_state["sensor_history"]:
+    reading = get_sensor_data()
+    st.session_state["sensor_history"].append(reading)
+    st.session_state["sensor_history"] = st.session_state["sensor_history"][-100:]
+
+latest = st.session_state["sensor_history"][-1]
+
+if latest.get("source") == "demo":
+    st.warning("Showing demo data — set your device URL in the sidebar to see live sensor readings.", icon="⚠️")
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Soil Moisture", f"{latest.get('soil_moisture', 'N/A')}%")
+c2.metric("Humidity", f"{latest.get('humidity', 'N/A')}%")
+c3.metric("Temperature", f"{latest.get('temperature', 'N/A')}°C")
+c4.metric("Light Level", f"{latest.get('light', 'N/A')}%")
+st.caption(f"Last updated: {latest.get('timestamp', '—')} ({latest.get('source', 'unknown')} data)")
+
+st.divider()
+st.subheader("Trend")
+
+if len(st.session_state["sensor_history"]) > 1:
+    df = pd.DataFrame(st.session_state["sensor_history"])
+    for col in ["soil_moisture", "humidity", "temperature", "light"]:
+        if col not in df.columns:
+            df[col] = None
+    if "timestamp" not in df.columns:
+        df["timestamp"] = range(len(df))
+    df = df.set_index("timestamp")[["soil_moisture", "humidity", "temperature", "light"]]
+    st.line_chart(df)
+else:
+    st.info("Refresh a few times to build up a trend chart.")
+
+if auto:
+    import time
+    time.sleep(10)
+    st.rerun()
